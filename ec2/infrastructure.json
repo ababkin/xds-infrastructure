@@ -1,0 +1,791 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+
+  "Description" : "CF template for xdataset cluster and data services",
+
+  "Parameters" : {
+    "InstanceType" : {
+      "Description" : "EC2 HVM instance type",
+      "Type" : "String",
+      "Default" : "t2.small",
+      "AllowedValues" : [ "t1.micro", "t2.micro", "t2.small", "t2.medium", "m1.small", "m1.medium", "m1.large", "m1.xlarge", "m2.xlarge", "m2.2xlarge", "m2.4xlarge", "m3.medium", "m3.large", "m3.xlarge", "m3.2xlarge", "c1.medium", "c1.xlarge", "c3.large", "c3.xlarge", "c3.2xlarge", "c3.4xlarge", "c3.8xlarge", "c4.large", "c4.xlarge", "c4.2xlarge", "c4.4xlarge", "c4.8xlarge", "g2.2xlarge", "r3.large", "r3.xlarge", "r3.2xlarge", "r3.4xlarge", "r3.8xlarge", "i2.xlarge", "i2.2xlarge", "i2.4xlarge", "i2.8xlarge", "hi1.4xlarge", "hs1.8xlarge", "cr1.8xlarge", "cc2.8xlarge", "cg1.4xlarge"],
+      "ConstraintDescription" : "Must be a valid EC2 HVM instance type."
+    },
+    "ClusterSize": {
+      "Default": "2",
+      "MinValue": "0",
+      "MaxValue": "12",
+      "Description": "Number of nodes in cluster (3-12).",
+      "Type": "Number"
+    },
+    "AllowSSHFrom": {
+      "Description": "The net block (CIDR) that SSH is available to.",
+      "Default": "0.0.0.0/0",
+      "Type": "String"
+    },
+    "KeyPair": {
+      "Description": "The name of an EC2 Key Pair to allow SSH access to the instance.",
+      "Type": "AWS::EC2::KeyPair::KeyName",
+      "Default": "xdataset"
+    },
+
+    "ReadCapacityUnits" : {
+      "Description" : "Provisioned read throughput",
+      "Type" : "Number",
+      "Default" : "5",
+      "MinValue": "5",
+      "MaxValue": "10000",
+      "ConstraintDescription" : "must be between 5 and 10000"
+    },
+
+    "WriteCapacityUnits" : {
+      "Description" : "Provisioned write throughput",
+      "Type" : "Number",
+      "Default" : "5",
+      "MinValue": "5",
+      "MaxValue": "10000",
+      "ConstraintDescription" : "must be between 5 and 10000"
+    },
+
+    "AwsAccessKey": {
+      "Description" : "aws access key",
+      "Type": "String",
+      "ConstraintDescription" : "AWS Access Key must be provided."
+    },
+
+    "AwsSecretKey": {
+      "Description" : "aws secret key",
+      "Type": "String",
+      "ConstraintDescription" : "AWS Access Key must be provided."
+    }
+    
+
+  },
+
+  "Mappings" : {
+    "RegionMap" : {
+
+      "eu-central-1" : {
+          "AMI" : "ami-eae5ddf7"
+      },
+      "ap-northeast-1" : {
+          "AMI" : "ami-1a6fca1a"
+      },
+      "us-gov-west-1" : {
+          "AMI" : "ami-e99fffca"
+      },
+      "sa-east-1" : {
+          "AMI" : "ami-b1cb49ac"
+      },
+      "ap-southeast-2" : {
+          "AMI" : "ami-23641e19"
+      },
+      "ap-southeast-1" : {
+          "AMI" : "ami-da030788"
+      },
+      "us-east-1" : {
+          "AMI" : "ami-93ea17f8"
+      },
+      "us-west-2" : {
+          "AMI" : "ami-5d4d486d"
+      },
+      "us-west-1" : {
+          "AMI" : "ami-c967938d"
+      },
+      "eu-west-1" : {
+          "AMI" : "ami-5f2f5528"
+      }
+
+    }
+  },
+
+
+  "Resources" : {
+
+    "VPC" : {
+      "Type" : "AWS::EC2::VPC",
+      "Properties" : {
+        "CidrBlock" : "10.0.0.0/16",
+        "Tags" : [ {"Key" : "Application", "Value" : { "Ref" : "AWS::StackId"} } ]
+      }
+    },
+
+    "Subnet" : {
+      "Type" : "AWS::EC2::Subnet",
+      "Properties" : {
+        "VpcId" : { "Ref" : "VPC" },
+        "CidrBlock" : "10.0.0.0/24",
+        "Tags" : [ {"Key" : "Application", "Value" : { "Ref" : "AWS::StackId"} } ]
+      }
+    },
+
+    "InternetGateway" : {
+      "Type" : "AWS::EC2::InternetGateway",
+      "Properties" : {
+        "Tags" : [ {"Key" : "Application", "Value" : { "Ref" : "AWS::StackId"} } ]
+      }
+    },
+
+    "AttachGateway" : {
+      "Type" : "AWS::EC2::VPCGatewayAttachment",
+      "Properties" : {
+        "VpcId" : { "Ref" : "VPC" },
+        "InternetGatewayId" : { "Ref" : "InternetGateway" }
+      }
+    },
+
+    "RouteTable" : {
+      "Type" : "AWS::EC2::RouteTable",
+      "Properties" : {
+        "VpcId" : {"Ref" : "VPC"},
+        "Tags" : [ {"Key" : "Application", "Value" : { "Ref" : "AWS::StackId"} } ]
+      }
+    },
+
+    "Route" : {
+      "Type" : "AWS::EC2::Route",
+      "DependsOn" : "AttachGateway",
+      "Properties" : {
+        "RouteTableId" : { "Ref" : "RouteTable" },
+        "DestinationCidrBlock" : "0.0.0.0/0",
+        "GatewayId" : { "Ref" : "InternetGateway" }
+      }
+    },
+
+    "SubnetRouteTableAssociation" : {
+      "Type" : "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties" : {
+        "SubnetId" : { "Ref" : "Subnet" },
+        "RouteTableId" : { "Ref" : "RouteTable" }
+      }
+    },
+
+    "NetworkAcl" : {
+      "Type" : "AWS::EC2::NetworkAcl",
+      "Properties" : {
+        "VpcId" : {"Ref" : "VPC"},
+        "Tags" : [ {"Key" : "Application", "Value" : { "Ref" : "AWS::StackId"} } ]
+      }
+    },
+
+    "InboundHTTPNetworkAclEntry" : {
+      "Type" : "AWS::EC2::NetworkAclEntry",
+      "Properties" : {
+        "NetworkAclId" : {"Ref" : "NetworkAcl"},
+        "RuleNumber" : "100",
+        "Protocol" : "6",
+        "RuleAction" : "allow",
+        "Egress" : "false",
+        "CidrBlock" : "0.0.0.0/0",
+        "PortRange" : {"From" : "80", "To" : "80"}
+      }
+    },
+
+    "InboundSSHNetworkAclEntry" : {
+      "Type" : "AWS::EC2::NetworkAclEntry",
+      "Properties" : {
+        "NetworkAclId" : {"Ref" : "NetworkAcl"},
+        "RuleNumber" : "101",
+        "Protocol" : "6",
+        "RuleAction" : "allow",
+        "Egress" : "false",
+        "CidrBlock" : "0.0.0.0/0",
+        "PortRange" : {"From" : "22", "To" : "22"}
+      }
+    },
+
+    "InboundResponsePortsNetworkAclEntry" : {
+      "Type" : "AWS::EC2::NetworkAclEntry",
+      "Properties" : {
+        "NetworkAclId" : {"Ref" : "NetworkAcl"},
+        "RuleNumber" : "102",
+        "Protocol" : "6",
+        "RuleAction" : "allow",
+        "Egress" : "false",
+        "CidrBlock" : "0.0.0.0/0",
+        "PortRange" : {"From" : "1024", "To" : "65535"}
+      }
+    },
+
+    "OutBoundHTTPNetworkAclEntry" : {
+      "Type" : "AWS::EC2::NetworkAclEntry",
+      "Properties" : {
+        "NetworkAclId" : {"Ref" : "NetworkAcl"},
+        "RuleNumber" : "100",
+        "Protocol" : "6",
+        "RuleAction" : "allow",
+        "Egress" : "true",
+        "CidrBlock" : "0.0.0.0/0",
+        "PortRange" : {"From" : "80", "To" : "80"}
+      }
+    },
+
+    "OutBoundHTTPSNetworkAclEntry" : {
+      "Type" : "AWS::EC2::NetworkAclEntry",
+      "Properties" : {
+        "NetworkAclId" : {"Ref" : "NetworkAcl"},
+        "RuleNumber" : "101",
+        "Protocol" : "6",
+        "RuleAction" : "allow",
+        "Egress" : "true",
+        "CidrBlock" : "0.0.0.0/0",
+        "PortRange" : {"From" : "443", "To" : "443"}
+      }
+    },
+
+    "OutBoundResponsePortsNetworkAclEntry" : {
+      "Type" : "AWS::EC2::NetworkAclEntry",
+      "Properties" : {
+        "NetworkAclId" : {"Ref" : "NetworkAcl"},
+        "RuleNumber" : "102",
+        "Protocol" : "6",
+        "RuleAction" : "allow",
+        "Egress" : "true",
+        "CidrBlock" : "0.0.0.0/0",
+        "PortRange" : {"From" : "1024", "To" : "65535"}
+      }
+    },
+
+    "SubnetNetworkAclAssociation" : {
+      "Type" : "AWS::EC2::SubnetNetworkAclAssociation",
+      "Properties" : {
+        "SubnetId" : { "Ref" : "Subnet" },
+        "NetworkAclId" : { "Ref" : "NetworkAcl" }
+      }
+    },
+
+
+
+
+
+
+    "KubernetesSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "VpcId": { "Ref" : "VPC" },
+        "GroupDescription": "Kubernetes SecurityGroup",
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "22",
+            "ToPort": "22",
+            "CidrIp": {"Ref": "AllowSSHFrom"}
+          }
+        ]
+      }
+    },
+    "KubernetesIngress": {
+      "Type": "AWS::EC2::SecurityGroupIngress",
+      "Properties": {
+        "GroupId": {"Fn::GetAtt": ["KubernetesSecurityGroup", "GroupId"]},
+        "IpProtocol": "tcp",
+        "FromPort": "1",
+        "ToPort": "65535",
+        "SourceSecurityGroupId": {
+          "Fn::GetAtt" : [ "KubernetesSecurityGroup", "GroupId" ]
+        }
+      }
+    },
+    "KubernetesIngressUDP": {
+      "Type": "AWS::EC2::SecurityGroupIngress",
+      "Properties": {
+        "GroupId": {"Fn::GetAtt": ["KubernetesSecurityGroup", "GroupId"]},
+        "IpProtocol": "udp",
+        "FromPort": "1",
+        "ToPort": "65535",
+        "SourceSecurityGroupId": {
+          "Fn::GetAtt" : [ "KubernetesSecurityGroup", "GroupId" ]
+        }
+      }
+    },
+    "KubernetesMasterInstance": {
+      "Type": "AWS::EC2::Instance",
+      "Properties": {
+        "NetworkInterfaces" : [{
+          "GroupSet"                 : [{"Fn::GetAtt": ["KubernetesSecurityGroup", "GroupId"]}],
+          "AssociatePublicIpAddress" : "true",
+          "DeviceIndex"              : "0",
+          "DeleteOnTermination"      : "true",
+          "SubnetId"                 : {"Ref": "Subnet"}
+        }],
+        "ImageId": {"Fn::FindInMap" : ["RegionMap", {"Ref": "AWS::Region" }, "AMI"]},
+        "InstanceType": {"Ref": "InstanceType"},
+        "KeyName": {"Ref": "KeyPair"},
+        "Tags" : [
+          {"Key" : "Name", "Value" : {"Fn::Join" : [ "-", [ {"Ref" : "AWS::StackName"}, "k8s-master" ] ]}},
+          {"Key" : "KubernetesRole", "Value" : "node"}
+        ],
+        "UserData": { "Fn::Base64": {"Fn::Join" : ["", [
+          "#cloud-config\n\n",
+          "write_files:\n",
+          "- path: /opt/bin/waiter.sh\n",
+          "  owner: root\n",
+          "  content: |\n",
+          "    #! /usr/bin/bash\n",
+          "    until curl http://127.0.0.1:2379/v2/machines; do sleep 2; done\n",
+          "coreos:\n",
+          "  etcd2:\n",
+          "    name: master\n",
+          "    initial-cluster-token: k8s_etcd\n",
+          "    initial-cluster: master=http://$private_ipv4:2380\n",
+          "    listen-peer-urls: http://$private_ipv4:2380,http://localhost:2380\n",
+          "    initial-advertise-peer-urls: http://$private_ipv4:2380\n",
+          "    listen-client-urls: http://$private_ipv4:2379,http://localhost:2379\n",
+          "    advertise-client-urls: http://$private_ipv4:2379\n",
+          "  fleet:\n",
+          "    etcd_servers: http://localhost:2379\n",
+          "    metadata: k8srole=master\n",
+          "  flannel:\n",
+          "    etcd_endpoints: http://localhost:2379\n",
+          "  locksmithd:\n",
+          "    endpoint: http://localhost:2379\n",
+          "  units:\n",
+          "    - name: etcd2.service\n",
+          "      command: start\n",
+          "    - name: fleet.service\n",
+          "      command: start\n",
+          "    - name: etcd2-waiter.service\n",
+          "      command: start\n",
+          "      content: |\n",
+          "        [Unit]\n",
+          "        Description=etcd waiter\n",
+          "        Wants=network-online.target\n",
+          "        Wants=etcd2.service\n",
+          "        After=etcd2.service\n",
+          "        After=network-online.target\n",
+          "        Before=flanneld.service fleet.service locksmithd.service\n\n",
+          "        [Service]\n",
+          "        ExecStart=/usr/bin/bash /opt/bin/waiter.sh\n",
+          "        RemainAfterExit=true\n",
+          "        Type=oneshot\n",
+          "    - name: flanneld.service\n",
+          "      command: start\n",
+          "      drop-ins:\n",
+          "        - name: 50-network-config.conf\n",
+          "          content: |\n",
+          "            [Service]\n",
+          "            ExecStartPre=-/usr/bin/etcdctl mk /coreos.com/network/config '{\"Network\": \"10.244.0.0/16\", \"Backend\": {\"Type\": \"vxlan\"}}'\n",
+          "    - name: docker-cache.service\n",
+          "      command: start\n",
+          "      content: |\n",
+          "        [Unit]\n",
+          "        Description=Docker cache proxy\n",
+          "        Requires=early-docker.service\n",
+          "        After=early-docker.service\n",
+          "        Before=early-docker.target\n\n",
+          "        [Service]\n",
+          "        Restart=always\n",
+          "        TimeoutStartSec=0\n",
+          "        RestartSec=5\n",
+          "        Environment=TMPDIR=/var/tmp/\n",
+          "        Environment=DOCKER_HOST=unix:///var/run/early-docker.sock\n",
+          "        ExecStartPre=-/usr/bin/docker kill docker-registry\n",
+          "        ExecStartPre=-/usr/bin/docker rm docker-registry\n",
+          "        ExecStartPre=/usr/bin/docker pull quay.io/devops/docker-registry:latest\n",
+          "        # GUNICORN_OPTS is an workaround for\n",
+          "        # https://github.com/docker/docker-registry/issues/892\n",
+          "        ExecStart=/usr/bin/docker run --rm --net host --name docker-registry \\\n",
+          "            -e STANDALONE=false \\\n",
+          "            -e GUNICORN_OPTS=[--preload] \\\n",
+          "            -e MIRROR_SOURCE=https://registry-1.docker.io \\\n",
+          "            -e MIRROR_SOURCE_INDEX=https://index.docker.io \\\n",
+          "            -e MIRROR_TAGS_CACHE_TTL=1800 \\\n",
+          "            quay.io/devops/docker-registry:latest\n",
+          "    - name: get-kubectl.service\n",
+          "      command: start\n",
+          "      content: |\n",
+          "        [Unit]\n",
+          "        Description=Get kubectl client tool\n",
+          "        Documentation=https://github.com/GoogleCloudPlatform/kubernetes\n",
+          "        Requires=network-online.target\n",
+          "        After=network-online.target\n\n",
+          "        [Service]\n",
+          "        ExecStart=/usr/bin/wget -N -P /opt/bin https://storage.googleapis.com/kubernetes-release/release/v0.19.3/bin/linux/amd64/kubectl\n",
+          "        ExecStart=/usr/bin/chmod +x /opt/bin/kubectl\n",
+          "        Type=oneshot\n",
+          "        RemainAfterExit=true\n",
+          "    - name: kube-apiserver.service\n",
+          "      command: start\n",
+          "      content: |\n",
+          "        [Unit]\n",
+          "        Description=Kubernetes API Server\n",
+          "        Documentation=https://github.com/GoogleCloudPlatform/kubernetes\n",
+          "        Requires=etcd2-waiter.service\n",
+          "        After=etcd2-waiter.service\n\n",
+          "        [Service]\n",
+          "        ExecStartPre=/usr/bin/wget -N -P /opt/bin https://storage.googleapis.com/kubernetes-release/release/v0.19.3/bin/linux/amd64/kube-apiserver\n",
+          "        ExecStartPre=/usr/bin/chmod +x /opt/bin/kube-apiserver\n",
+          "        ExecStart=/opt/bin/kube-apiserver \\\n",
+          "        --insecure-bind-address=0.0.0.0 \\\n",
+          "        --service-cluster-ip-range=10.100.0.0/16 \\\n",
+          "        --etcd-servers=http://localhost:2379\n",
+          "        Restart=always\n",
+          "        RestartSec=10\n",
+          "    - name: kube-controller-manager.service\n",
+          "      command: start\n",
+          "      content: |\n",
+          "        [Unit]\n",
+          "        Description=Kubernetes Controller Manager\n",
+          "        Documentation=https://github.com/GoogleCloudPlatform/kubernetes\n",
+          "        Requires=kube-apiserver.service\n",
+          "        After=kube-apiserver.service\n\n",
+          "        [Service]\n",
+          "        ExecStartPre=/usr/bin/wget -N -P /opt/bin https://storage.googleapis.com/kubernetes-release/release/v0.19.3/bin/linux/amd64/kube-controller-manager\n",
+          "        ExecStartPre=/usr/bin/chmod +x /opt/bin/kube-controller-manager\n",
+          "        ExecStart=/opt/bin/kube-controller-manager \\\n",
+          "        --master=127.0.0.1:8080\n",
+          "        Restart=always\n",
+          "        RestartSec=10\n",
+          "    - name: kube-scheduler.service\n",
+          "      command: start\n",
+          "      content: |\n",
+          "        [Unit]\n",
+          "        Description=Kubernetes Scheduler\n",
+          "        Documentation=https://github.com/GoogleCloudPlatform/kubernetes\n",
+          "        Requires=kube-apiserver.service\n",
+          "        After=kube-apiserver.service\n\n",
+          "        [Service]\n",
+          "        ExecStartPre=/usr/bin/wget -N -P /opt/bin https://storage.googleapis.com/kubernetes-release/release/v0.19.3/bin/linux/amd64/kube-scheduler\n",
+          "        ExecStartPre=/usr/bin/chmod +x /opt/bin/kube-scheduler\n",
+          "        ExecStart=/opt/bin/kube-scheduler \\\n",
+          "        --master=127.0.0.1:8080\n",
+          "        Restart=always\n",
+          "        RestartSec=10\n",
+          "    - name: kube-register.service\n",
+          "      command: start\n",
+          "      content: |\n",
+          "        [Unit]\n",
+          "        Description=Kubernetes Registration Service\n",
+          "        Documentation=https://github.com/kelseyhightower/kube-register\n",
+          "        Requires=kube-apiserver.service fleet.service\n",
+          "        After=kube-apiserver.service fleet.service\n\n",
+          "        [Service]\n",
+          "        ExecStartPre=-/usr/bin/wget -nc -O /opt/bin/kube-register https://github.com/kelseyhightower/kube-register/releases/download/v0.0.4/kube-register-0.0.4-linux-amd64\n",
+          "        ExecStartPre=/usr/bin/chmod +x /opt/bin/kube-register\n",
+          "        ExecStart=/opt/bin/kube-register \\\n",
+          "        --metadata=k8srole=node \\\n",
+          "        --fleet-endpoint=unix:///var/run/fleet.sock \\\n",
+          "        --api-endpoint=http://127.0.0.1:8080\n",
+          "        Restart=always\n",
+          "        RestartSec=10\n",
+          "  update:\n",
+          "    group: alpha\n",
+          "    reboot-strategy: off\n"
+          ]]}
+        }
+      }
+    },
+    "KubernetesNodeLaunchConfig": {
+      "Type": "AWS::AutoScaling::LaunchConfiguration",
+      "Properties": {
+        "ImageId": {"Fn::FindInMap" : ["RegionMap", {"Ref": "AWS::Region" }, "AMI" ]},
+        "InstanceType": {"Ref": "InstanceType"},
+        "KeyName": {"Ref": "KeyPair"},
+        "AssociatePublicIpAddress" : "true",
+        "SecurityGroups": [{"Fn::GetAtt": ["KubernetesSecurityGroup", "GroupId"]}],
+        "UserData": { "Fn::Base64": {"Fn::Join" : ["", [
+          "#cloud-config\n\n",
+          "coreos:\n",
+          "  etcd2:\n",
+          "    listen-client-urls: http://localhost:2379\n",
+          "    initial-cluster: master=http://", {"Fn::GetAtt" :["KubernetesMasterInstance" , "PrivateIp"]}, ":2380\n",
+          "    proxy: on\n",
+          "  fleet:\n",
+          "    etcd_servers: http://localhost:2379\n",
+          "    metadata: k8srole=node\n",
+          "  flannel:\n",
+          "    etcd_endpoints: http://localhost:2379\n",
+          "  locksmithd:\n",
+          "    endpoint: http://localhost:2379\n",
+          "  units:\n",
+          "    - name: etcd2.service\n",
+          "      command: start\n",
+          "    - name: fleet.service\n",
+          "      command: start\n",
+          "    - name: flanneld.service\n",
+          "      command: start\n",
+          "    - name: docker.service\n",
+          "      command: start\n",
+          "      drop-ins:\n",
+          "        - name: 50-docker-mirror.conf\n",
+          "          content: |\n",
+          "            [Service]\n",
+          "            Environment=DOCKER_OPTS='--registry-mirror=http://", {"Fn::GetAtt" :["KubernetesMasterInstance" , "PrivateIp"]}, ":5000'\n",
+          "    - name: kubelet.service\n",
+          "      command: start\n",
+          "      content: |\n",
+          "        [Unit]\n",
+          "        Description=Kubernetes Kubelet\n",
+          "        Documentation=https://github.com/GoogleCloudPlatform/kubernetes\n",
+          "        Requires=network-online.target\n",
+          "        After=network-online.target\n\n",
+          "        [Service]\n",
+          "        ExecStartPre=/usr/bin/wget -N -P /opt/bin https://storage.googleapis.com/kubernetes-release/release/v0.19.3/bin/linux/amd64/kubelet\n",
+          "        ExecStartPre=/usr/bin/chmod +x /opt/bin/kubelet\n",
+          "        ExecStart=/opt/bin/kubelet \\\n",
+          "        --api-servers=", {"Fn::GetAtt" :["KubernetesMasterInstance" , "PrivateIp"]}, ":8080 \\\n",
+          "        --hostname-override=$private_ipv4\n",
+          "        Restart=always\n",
+          "        RestartSec=10\n",
+          "    - name: kube-proxy.service\n",
+          "      command: start\n",
+          "      content: |\n",
+          "        [Unit]\n",
+          "        Description=Kubernetes Proxy\n",
+          "        Documentation=https://github.com/GoogleCloudPlatform/kubernetes\n",
+          "        Requires=network-online.target\n",
+          "        After=network-online.target\n\n",
+          "        [Service]\n",
+          "        ExecStartPre=/usr/bin/wget -N -P /opt/bin https://storage.googleapis.com/kubernetes-release/release/v0.19.3/bin/linux/amd64/kube-proxy\n",
+          "        ExecStartPre=/usr/bin/chmod +x /opt/bin/kube-proxy\n",
+          "        ExecStart=/opt/bin/kube-proxy \\\n",
+          "        --master=http://", {"Fn::GetAtt" :["KubernetesMasterInstance" , "PrivateIp"]}, ":8080\n",
+          "        Restart=always\n",
+          "        RestartSec=10\n",
+          "  update:\n",
+          "    group: alpha\n",
+          "    reboot-strategy: off\n",
+          "  write_files:\n",
+            "  - path: /home/core/xds-downloader@.service\n",
+            "    content: |\n",
+            "      [Unit]\n",
+            "      Description=xds-downloader\n",
+            "      [Service]\n",
+            "      Restart=always\n",
+            "      RestartSec=15\n",
+            "      ExecStartPre=-/usr/bin/docker kill xds-downloader-%i\n",
+            "      ExecStartPre=-/usr/bin/docker rm xds-downloader-%i\n",
+            "      ExecStart=/usr/bin/docker run --rm --name xds-downloader-%i \\\n",
+            "      -e SERVICE_NAME=xds-downloader \\\n",
+            "      -e SERVICE_TAGS=http \\\n",
+            "      -e AWS_ACCESS_KEY_ID=", { "Ref": "AwsAccessKey" }, " \\\n",
+            "      -e AWS_ACCESS_KEY=", { "Ref": "AwsAccessKey" },  " \\\n",
+            "      -e AWS_SECRET_KEY=", { "Ref": "AwsSecretKey" }, " \\\n",
+            "      -e AWS_ACCESS_KEY_SECRET=", { "Ref": "AwsSecretKey" }, " \\\n",
+            "      -e AWS_SECRET_ACCESS_KEY=", { "Ref": "AwsSecretKey" }, " \\\n",
+            "      -e DownloadQueueName=", { "Fn::GetAtt" : [ "DownloadQueue", "QueueName" ] }, " \\\n",
+            "      -e DownloadCompleteSNSTopic=", { "Ref": "DownloadCompleteSNSTopic" }, " \\\n",
+            "      -P --dns 172.17.42.1 ababkin/xds-downloader xds-downloader\n",
+            "      ExecStop=/usr/bin/docker stop xds-downloader-%i\n",
+            "  - path: /home/core/xds-processor@.service\n",
+            "    content: |\n",
+            "      [Unit]\n",
+            "      Description=xds-processor\n",
+            "      [Service]\n",
+            "      Restart=always\n",
+            "      RestartSec=15\n",
+            "      ExecStartPre=-/usr/bin/docker kill xds-processor-%i\n",
+            "      ExecStartPre=-/usr/bin/docker rm xds-processor-%i\n",
+            "      ExecStart=/usr/bin/docker run --rm --name xds-processor-%i \\\n",
+            "      -e SERVICE_NAME=xds-processor \\\n",
+            "      -e SERVICE_TAGS=http \\\n",
+            "      -e AWS_ACCESS_KEY_ID=", { "Ref": "AwsAccessKey" }, " \\\n",
+            "      -e AWS_ACCESS_KEY=", { "Ref": "AwsAccessKey" },  " \\\n",
+            "      -e AWS_SECRET_KEY=", { "Ref": "AwsSecretKey" }, " \\\n",
+            "      -e AWS_ACCESS_KEY_SECRET=", { "Ref": "AwsSecretKey" }, " \\\n",
+            "      -e AWS_SECRET_ACCESS_KEY=", { "Ref": "AwsSecretKey" }, " \\\n",
+            "      -e ProcessQueueName=", { "Fn::GetAtt" : [ "ProcessQueue", "QueueName" ] }, " \\\n",
+            "      -e ProcessCompleteSNSTopic=", { "Ref": "ProcessCompleteSNSTopic" }, " \\\n",
+            "      -P --dns 172.17.42.1 ababkin/xds-processor xds-processor\n",
+            "      ExecStop=/usr/bin/docker stop xds-processor-%i\n"
+          ]]}
+        }
+      }
+    },
+
+    "KubernetesAutoScalingGroup": {
+      "Type": "AWS::AutoScaling::AutoScalingGroup",
+      "Properties": {
+        "VPCZoneIdentifier": [{"Ref": "Subnet"}],
+        "LaunchConfigurationName": {"Ref": "KubernetesNodeLaunchConfig"},
+        "MinSize": "2",
+        "MaxSize": "12",
+        "DesiredCapacity": {"Ref": "ClusterSize"},
+        "Tags" : [
+          {"Key" : "Name", "Value" : {"Fn::Join" : [ "-", [ {"Ref" : "AWS::StackName"}, "k8s-node" ] ]}, "PropagateAtLaunch" : true},
+          {"Key" : "KubernetesRole", "Value" : "node", "PropagateAtLaunch" : true}
+        ]
+      }
+    },
+
+
+
+
+    "DownloadQueue" : {
+      "Type" : "AWS::SQS::Queue",
+      "Properties" : {
+        "QueueName" : "download"
+      }
+    },
+
+    "ArchiveQueue" : {
+      "Type" : "AWS::SQS::Queue",
+      "Properties" : {
+        "QueueName" : "archive"
+      }
+    },
+
+    "ProcessQueue" : {
+      "Type" : "AWS::SQS::Queue",
+      "Properties" : {
+        "QueueName" : "process"
+      }
+    },
+
+    "IndexQueue" : {
+      "Type" : "AWS::SQS::Queue",
+      "Properties" : {
+        "QueueName" : "index"
+      }
+    },
+
+    "NotifyQueue" : {
+      "Type" : "AWS::SQS::Queue",
+      "Properties" : {
+        "QueueName" : "notify"
+      }
+    },
+
+
+
+
+
+    "S3Bucket" : {
+      "Type" : "AWS::S3::Bucket",
+      "Properties" : {
+        "BucketName" : "xdataset.production",
+        "AccessControl" : "PublicRead",
+        "WebsiteConfiguration" : {
+          "IndexDocument" : "index.html",
+          "ErrorDocument" : "error.html"
+        }
+      }
+    },
+
+
+    "DownloadCompleteSNSTopic" : {
+      "Type" : "AWS::SNS::Topic",
+      "Properties" : {
+        "Subscription" : [
+          { "Endpoint" : { "Fn::GetAtt" : [ "ArchiveQueue", "Arn" ] }, "Protocol" : "sqs" },
+          { "Endpoint" : { "Fn::GetAtt" : [ "ProcessQueue", "Arn" ] }, "Protocol" : "sqs" },
+          { "Endpoint" : { "Fn::GetAtt" : [ "NotifyQueue", "Arn" ] }, "Protocol" : "sqs" }
+        ],
+        "TopicName" : "downloadComplete"
+      }
+    },
+
+    "DownloadCompleteSNSTopicPolicy" : {
+      "Type" : "AWS::SNS::TopicPolicy",
+      "Properties" : {
+        "PolicyDocument" :  {
+          "Id" : "DownloadCompleteSNSTopicPolicy",
+          "Version" : "2012-10-17",
+          "Statement" : [ {
+            "Sid" : "DownloadCompleteSNSTopicPolicy-statement-id",
+            "Effect" : "Allow",
+            "Principal" : {
+              "AWS" : "*"
+            },
+            "Action" : ["sns:Publish"],
+            "Resource" : "*"
+          } ]
+        },
+        "Topics" : [ { "Ref" : "DownloadCompleteSNSTopic" } ]
+      }
+    },
+
+    "DownloadCompleteSNSTopicToQueuesPolicy":{
+      "Type":"AWS::SQS::QueuePolicy",
+      "Properties":{        
+        "PolicyDocument":{
+          "Version":"2012-10-17",
+          "Id":"MyQueuePolicy",
+          "Statement":[
+            {
+              "Sid":"Allow-SendMessage-To-Both-Queues-From-SNS-Topic",
+              "Effect":"Allow",           
+              "Principal": {
+                "AWS": "*"
+              },
+              "Action":["sqs:*"],
+              "Resource":"*"
+
+            }
+          ]
+        },
+        "Queues":[
+          {"Ref":"ArchiveQueue"}, 
+          {"Ref":"ProcessQueue"},
+          {"Ref":"NotifyQueue"}
+        ]
+      }
+    },
+
+
+
+    "ProcessCompleteSNSTopic" : {
+      "Type" : "AWS::SNS::Topic",
+      "Properties" : {
+        "Subscription" : [
+          { "Endpoint" : { "Fn::GetAtt" : [ "IndexQueue", "Arn" ] }, "Protocol" : "sqs" },
+          { "Endpoint" : { "Fn::GetAtt" : [ "NotifyQueue", "Arn" ] }, "Protocol" : "sqs" }
+        ],
+        "TopicName" : "processComplete"
+      }
+    },
+
+    "ProcessCompleteSNSTopicPolicy" : {
+      "Type" : "AWS::SNS::TopicPolicy",
+      "Properties" : {
+        "PolicyDocument" :  {
+          "Id" : "ProcessCompleteSNSTopicPolicy",
+          "Version" : "2012-10-17",
+          "Statement" : [ {
+            "Sid" : "ProcessCompleteSNSTopicPolicy-statement-id",
+            "Effect" : "Allow",
+            "Principal" : {
+              "AWS" : "*"
+            },
+            "Action" : ["sns:Publish"],
+            "Resource" : "*"
+          } ]
+        },
+        "Topics" : [ { "Ref" : "ProcessCompleteSNSTopic" } ]
+      }
+    },
+
+    "ProcessCompleteSNSTopicToQueuesPolicy":{
+      "Type":"AWS::SQS::QueuePolicy",
+      "Properties":{        
+        "PolicyDocument":{
+          "Version":"2012-10-17",
+          "Id": "ProcessCompleteSNSTopicToQueuesPolicy",
+          "Statement":[
+            {
+              "Sid":"Allow-SendMessage-To-Both-Queues-From-SNS-Topic",
+              "Effect":"Allow",           
+              "Principal": {
+                "AWS": "*"
+              },
+              "Action":["sqs:*"],
+              "Resource":"*"
+
+            }
+          ]
+        },
+        "Queues":[
+          {"Ref":"IndexQueue"}, 
+          {"Ref":"NotifyQueue"}
+        ]
+      }
+    }
+  },
+
+  "Outputs": {
+    "KubernetesMasterPublicIp": {
+      "Description": "Public Ip of the newly created Kubernetes Master instance",
+      "Value": {"Fn::GetAtt": ["KubernetesMasterInstance" , "PublicIp"]}
+    }
+  }
+}
