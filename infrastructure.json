@@ -257,6 +257,25 @@
 
 
 
+    "WorkerSecurityGroup": {
+      "Type" : "AWS::EC2::SecurityGroup",
+      "Properties" : {
+        "GroupDescription" : "Worker security group",
+        "VpcId" : {"Ref" : "VPC"},
+        "SecurityGroupIngress" : [{
+              "IpProtocol" : "tcp",
+              "FromPort" : "1",
+              "ToPort" : "65535",
+              "CidrIp" : "0.0.0.0/0"
+        }],
+        "SecurityGroupEgress" : [{
+           "IpProtocol" : "tcp",
+           "FromPort" : "1",
+           "ToPort" : "65535",
+           "CidrIp" : "0.0.0.0/0"
+        }]      
+      }
+    },
 
 
     "KubernetesSecurityGroup": {
@@ -482,7 +501,7 @@
         "InstanceType": {"Ref": "InstanceType"},
         "KeyName": {"Ref": "KeyPair"},
         "AssociatePublicIpAddress" : "true",
-        "SecurityGroups": [{"Fn::GetAtt": ["KubernetesSecurityGroup", "GroupId"]}],
+        "SecurityGroups": [{"Fn::GetAtt": ["KubernetesSecurityGroup", "GroupId"]}, {"Fn::GetAtt": ["WorkerSecurityGroup", "GroupId"]}],
         "UserData": { "Fn::Base64": {"Fn::Join" : ["", [
           "#cloud-config\n\n",
           "coreos:\n",
@@ -557,7 +576,7 @@
           "      ExecStartPre=-/usr/bin/docker rm xds-downloader-%i\n",
           "      ExecStart=/usr/bin/docker run --rm --name xds-downloader-%i \\\n",
           "      -e SERVICE_NAME=xds-downloader \\\n",
-          "      -e SERVICE_TAGS=http \\\n",
+          "      -e SERVICE_TAGS=worker \\\n",
           "      -e AWS_ACCESS_KEY_ID=", { "Ref": "AwsAccessKey" }, " \\\n",
           "      -e AWS_ACCESS_KEY=", { "Ref": "AwsAccessKey" },  " \\\n",
           "      -e AWS_SECRET_KEY=", { "Ref": "AwsSecretKey" }, " \\\n",
@@ -565,7 +584,7 @@
           "      -e AWS_SECRET_ACCESS_KEY=", { "Ref": "AwsSecretKey" }, " \\\n",
           "      -e DownloadQueueName=", { "Fn::GetAtt" : [ "DownloadQueue", "QueueName" ] }, " \\\n",
           "      -e DownloadCompleteSNSTopic=", { "Ref": "DownloadCompleteSNSTopic" }, " \\\n",
-          "      -P --dns 172.17.42.1 ababkin/xds-downloader xds-downloader\n",
+          "      -P ababkin/xds-downloader xds-downloader\n",
           "      ExecStop=/usr/bin/docker stop xds-downloader-%i\n",
           "  - path: /home/core/xds-processor@.service\n",
           "    content: |\n",
@@ -578,7 +597,7 @@
           "      ExecStartPre=-/usr/bin/docker rm xds-processor-%i\n",
           "      ExecStart=/usr/bin/docker run --rm --name xds-processor-%i \\\n",
           "      -e SERVICE_NAME=xds-processor \\\n",
-          "      -e SERVICE_TAGS=http \\\n",
+          "      -e SERVICE_TAGS=worker \\\n",
           "      -e AWS_ACCESS_KEY_ID=", { "Ref": "AwsAccessKey" }, " \\\n",
           "      -e AWS_ACCESS_KEY=", { "Ref": "AwsAccessKey" },  " \\\n",
           "      -e AWS_SECRET_KEY=", { "Ref": "AwsSecretKey" }, " \\\n",
@@ -586,7 +605,7 @@
           "      -e AWS_SECRET_ACCESS_KEY=", { "Ref": "AwsSecretKey" }, " \\\n",
           "      -e ProcessQueueName=", { "Fn::GetAtt" : [ "ProcessQueue", "QueueName" ] }, " \\\n",
           "      -e ProcessCompleteSNSTopic=", { "Ref": "ProcessCompleteSNSTopic" }, " \\\n",
-          "      -P --dns 172.17.42.1 ababkin/xds-processor xds-processor\n",
+          "      -P ababkin/xds-processor xds-processor\n",
           "      ExecStop=/usr/bin/docker stop xds-processor-%i\n"
           ]]}
         }
@@ -789,3 +808,4 @@
     }
   }
 }
+

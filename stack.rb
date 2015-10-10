@@ -9,7 +9,7 @@ require "uri"
 
 # p "Using new discovery URL: #{discovery_url} ..."
 
-template_file = "file://~/work/xdataset/aws/ec2/infrastructure.json"
+template_file = "file://~/work/xdataset/aws/infrastructure.json"
 p "Using template: #{template_file} ..."
 
 fail "Please provide AWS_ACCESS_KEY and AWS_SECRET_KEY environment variables" unless ENV['AWS_ACCESS_KEY'] && ENV['AWS_SECRET_KEY']

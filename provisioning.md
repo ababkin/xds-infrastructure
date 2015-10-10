@@ -1,12 +1,7 @@
 
 ssh to coreos instance: 
-`ssh -i "xdataset.pem" core@52.6.153.240`
-
-`fleetctl list-machines`
-
-`ssh -A -L 8500:<private IP of a consul server node>:8500 core@<public IP of the same node>`
-then open 'http://localhost:8500' in browser
-
+`ssh-add xdataset.pem`
+`ssh -A core@52.6.153.240`
 
 system units are in `/etc/systemd/system`, custom unit files can be anywhere
 
@@ -26,9 +21,6 @@ then destroy all instances
 
 check status of the unit, see the logs: 
 `fleetctl status xds-downloader@1`
-
-for some reason if unit is running on a different node than one logged in to it errors and asks for ssh-agent
-^ if you ssh-add the identity and ssh with -A, it works
 
 ## Troubleshooting
 
