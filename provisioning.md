@@ -55,10 +55,6 @@ or
 
 
 
-### questions
-- why when running `fleetctl start xds-downloader@` it hangs? then running `fleetctl start xds-downloader@1` works fine?
-- whats the best way to pass sensitive data to executable running inside the container?
-
 
 
 
