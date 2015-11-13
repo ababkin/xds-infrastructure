@@ -20,3 +20,17 @@ view replication controllers
 
 see pods' IPs
 `kubectl get pods -l app=nginx -o json | grep podIP`
+
+`kubectl get services`
+
+
+
+
+troubleshooting:
+
+list running pods:
+`kubectl get pods`
+
+then use the pod ids to inspect logs:
+`kubectl logs --previous xds-site-rc-8rv5d`
+
