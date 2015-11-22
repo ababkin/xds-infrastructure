@@ -858,7 +858,136 @@
         "DBSubnetGroupName" : { "Ref" : "PostgresDBSubnetGroup" },
         "VPCSecurityGroups" : [ { "Ref" : "PostgresVPCSecurityGroup" }  ]
       }
+    },
+
+    "sourcesDBTable" : {
+      "Type" : "AWS::DynamoDB::Table",
+      "Properties" : {
+        "TableName" : "sources",
+        "AttributeDefinitions" : [
+          {
+            "AttributeName" : "uuid",
+            "AttributeType" : "S"
+          },
+          {
+            "AttributeName" : "userId",
+            "AttributeType" : "S"
+          },
+          {
+            "AttributeName" : "createdAt",
+            "AttributeType" : "N"
+          }
+        ],
+        "KeySchema" : [
+          {
+            "AttributeName" : "uuid",
+            "KeyType" : "HASH"
+          }
+        ],
+        "ProvisionedThroughput" : {
+          "ReadCapacityUnits" : "5",
+          "WriteCapacityUnits" : "5"
+        },
+        "GlobalSecondaryIndexes" : [{
+          "IndexName" : "UsersIndex",
+          "KeySchema" : [
+            {
+              "AttributeName" : "userId",
+              "KeyType" : "HASH"
+            },
+            {
+              "AttributeName" : "createdAt",
+              "KeyType" : "RANGE"
+            }
+          ],
+          "Projection" : {
+            "ProjectionType" : "KEYS_ONLY"
+          },
+          "ProvisionedThroughput" : {
+            "ReadCapacityUnits" : "5",
+            "WriteCapacityUnits" : "5"
+          }
+        }]
+      }
+    },
+
+    "datasetsDBTable" : {
+      "Type" : "AWS::DynamoDB::Table",
+      "Properties" : {
+        "TableName" : "datasets",
+        "AttributeDefinitions" : [
+          {
+            "AttributeName" : "uuid",
+            "AttributeType" : "S"
+          },
+          {
+            "AttributeName" : "sourceId",
+            "AttributeType" : "S"
+          },
+          {
+            "AttributeName" : "userId",
+            "AttributeType" : "S"
+          },
+          {
+            "AttributeName" : "createdAt",
+            "AttributeType" : "N"
+          }
+        ],
+        "KeySchema" : [
+          {
+            "AttributeName" : "uuid",
+            "KeyType" : "HASH"
+          }
+        ],
+        "ProvisionedThroughput" : {
+          "ReadCapacityUnits" : "5",
+          "WriteCapacityUnits" : "5"
+        },
+        "GlobalSecondaryIndexes" : [
+          {
+            "IndexName" : "UsersIndex",
+            "KeySchema" : [
+              {
+                "AttributeName" : "userId",
+                "KeyType" : "HASH"
+              },
+              {
+                "AttributeName" : "createdAt",
+                "KeyType" : "RANGE"
+              }
+            ],
+            "Projection" : {
+              "ProjectionType" : "KEYS_ONLY"
+            },
+            "ProvisionedThroughput" : {
+              "ReadCapacityUnits" : "5",
+              "WriteCapacityUnits" : "5"
+            }
+          },
+          {
+            "IndexName" : "SourcesIndex",
+            "KeySchema" : [
+              {
+                "AttributeName" : "sourceId",
+                "KeyType" : "HASH"
+              },
+              {
+                "AttributeName" : "createdAt",
+                "KeyType" : "RANGE"
+              }
+            ],
+            "Projection" : {
+              "ProjectionType" : "ALL"
+            },
+            "ProvisionedThroughput" : {
+              "ReadCapacityUnits" : "10",
+              "WriteCapacityUnits" : "5"
+            }
+          }
+        ]
+      }
     }
+
   },
 
   "Outputs": {
